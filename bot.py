@@ -1,5 +1,4 @@
 import os
-import re
 import requests
 import discord
 
@@ -8,18 +7,18 @@ DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
 CHANNEL_ID = 1549512858537041950
 GOAL = 360000
 
-STATS_URL = (
-    "https://secure.givelively.org/"
-    "donations/brave-maker/stats?campaign=just-roommates"
+DATA_URL = (
+    "https://secure.givelively.org/donations/brave-maker/"
+    "just-roommates.json?last_donation_date=2026-09-15T17:26:23.000Z"
 )
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
 
-def get_funding_total():
+def get_funding_data():
     response = requests.get(
-        STATS_URL,
+        DATA_URL,
         timeout=30,
         headers={
             "User-Agent": "Mozilla/5.0"
@@ -28,26 +27,16 @@ def get_funding_total():
 
     response.raise_for_status()
 
-    html = response.text
+    data = response.json()
 
-    print("STATS RESPONSE:")
-    print(html)
+    total = float(data["newTotalAmount"])
+    donor_count = int(data["newDonorCount"])
 
-    match = re.search(
-        r'data-amount="([\d.]+)"',
-        html
-    )
-
-    if not match:
-        return None
-
-    return float(match.group(1))
+    return total, donor_count
 
 
 def progress_bar(current, goal, length=20):
     percent = min(current / goal, 1)
-
-    # Show at least one filled block once money has been raised
     filled = round(percent * length)
 
     if current > 0 and filled == 0:
@@ -67,12 +56,15 @@ async def on_ready():
         await client.close()
         return
 
-    total = get_funding_total()
+    try:
+        total, donor_count = get_funding_data()
+    except Exception as e:
+        print(f"Give Lively error: {e}")
 
-    if total is None:
         await channel.send(
             "⚠️ I couldn't read the Give Lively funding total."
         )
+
         await client.close()
         return
 
@@ -91,7 +83,7 @@ async def on_ready():
 
     embed.add_field(
         name="💗 Raised",
-        value=f"**${total:,.0f}**",
+        value=f"**${total:,.2f}**",
         inline=True
     )
 
@@ -102,16 +94,19 @@ async def on_ready():
     )
 
     embed.add_field(
+        name="👥 Donors",
+        value=f"**{donor_count:,}**",
+        inline=True
+    )
+
+    embed.add_field(
         name="✨ Still Needed",
-        value=f"**${remaining:,.0f}**",
+        value=f"**${remaining:,.2f}**",
         inline=False
     )
 
     embed.set_footer(
-        text=(
-            "Automatically updated from the "
-            "Just Roommates Give Lively campaign."
-        )
+        text="Automatically updated from the Just Roommates Give Lively campaign."
     )
 
     await channel.send(embed=embed)
