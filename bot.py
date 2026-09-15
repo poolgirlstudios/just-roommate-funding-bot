@@ -1,7 +1,8 @@
 import os
 import re
-import requests
+import asyncio
 import discord
+from playwright.async_api import async_playwright
 
 DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
 
@@ -13,22 +14,37 @@ GIVE_LIVELY_URL = "https://secure.givelively.org/donate/brave-maker/just-roommat
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
-def get_funding_total():
-    r = requests.get(GIVE_LIVELY_URL, timeout=30)
-    text = r.text
-
-    # Looks for text like "$12,345 raised"
-    match = re.search(r'\$([\d,]+(?:\.\d{2})?)\s+raised', text, re.IGNORECASE)
-
-    if not match:
-        return None
-
-    return float(match.group(1).replace(",", ""))
 
 def progress_bar(current, goal, length=20):
     percent = min(current / goal, 1)
     filled = round(percent * length)
     return "█" * filled + "░" * (length - filled)
+
+
+async def get_funding_total():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+
+        page = await browser.new_page()
+        await page.goto(GIVE_LIVELY_URL, wait_until="networkidle")
+
+        text = await page.locator("body").inner_text()
+
+        await browser.close()
+
+        print(text)
+
+        match = re.search(
+            r'\$([\d,]+(?:\.\d{2})?)\s+raised',
+            text,
+            re.IGNORECASE
+        )
+
+        if not match:
+            return None
+
+        return float(match.group(1).replace(",", ""))
+
 
 @client.event
 async def on_ready():
@@ -41,11 +57,11 @@ async def on_ready():
         await client.close()
         return
 
-    total = get_funding_total()
+    total = await get_funding_total()
 
     if total is None:
         await channel.send(
-            "⚠️ I couldn't read the current Give Lively total."
+            "⚠️ I still couldn't read the Give Lively total."
         )
         await client.close()
         return
@@ -78,10 +94,13 @@ async def on_ready():
         inline=False
     )
 
-    embed.set_footer(text="Automatically updated from the public Give Lively campaign.")
+    embed.set_footer(
+        text="Automatically updated from the Just Roommates Give Lively campaign."
+    )
 
     await channel.send(embed=embed)
 
     await client.close()
+
 
 client.run(DISCORD_TOKEN)
