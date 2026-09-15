@@ -28,24 +28,37 @@ async def get_funding_total():
 
         await page.goto(
             GIVE_LIVELY_URL,
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
             timeout=60000
         )
 
-        # Give the live display a moment to finish rendering
-        await page.wait_for_timeout(3000)
+        # Give Give Lively time to load the live display
+        await page.wait_for_timeout(8000)
 
-        text = await page.locator("body").inner_text()
+        all_text = ""
 
-        print("PAGE TEXT:")
-        print(text)
+        print("FRAMES FOUND:")
+
+        for i, frame in enumerate(page.frames):
+            print(f"FRAME {i}: {frame.url}")
+
+            try:
+                text = await frame.locator("body").inner_text(timeout=5000)
+
+                if text.strip():
+                    print(f"FRAME {i} TEXT:")
+                    print(text)
+
+                    all_text += "\n" + text
+
+            except Exception as e:
+                print(f"Could not read frame {i}: {e}")
 
         await browser.close()
 
-        # Find all dollar amounts displayed on the page
         amounts = re.findall(
             r'\$([\d,]+(?:\.\d{2})?)',
-            text
+            all_text
         )
 
         print("AMOUNTS FOUND:", amounts)
@@ -53,11 +66,14 @@ async def get_funding_total():
         if not amounts:
             return None
 
-        # The first dollar amount on the Give Lively Live Display
-        # is the campaign's current amount raised.
-        total = float(amounts[0].replace(",", ""))
+        # Ignore the $360,000 goal and use the first other dollar amount.
+        for amount in amounts:
+            value = float(amount.replace(",", ""))
 
-        return total
+            if value != GOAL:
+                return value
+
+        return None
 
 
 @client.event
