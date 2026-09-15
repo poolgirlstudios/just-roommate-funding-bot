@@ -1,79 +1,59 @@
 import os
 import re
+import requests
 import discord
-from playwright.async_api import async_playwright
 
 DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
 
 CHANNEL_ID = 1549512858537041950
 GOAL = 360000
 
-GIVE_LIVELY_URL = "https://secure.givelively.org/donations/brave-maker/just-roommates"
+STATS_URL = (
+    "https://secure.givelively.org/"
+    "donations/brave-maker/stats?campaign=just-roommates"
+)
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
 
+def get_funding_total():
+    response = requests.get(
+        STATS_URL,
+        timeout=30,
+        headers={
+            "User-Agent": "Mozilla/5.0"
+        }
+    )
+
+    response.raise_for_status()
+
+    html = response.text
+
+    print("STATS RESPONSE:")
+    print(html)
+
+    match = re.search(
+        r'data-amount="([\d.]+)"',
+        html
+    )
+
+    if not match:
+        return None
+
+    return float(match.group(1))
+
+
 def progress_bar(current, goal, length=20):
     percent = min(current / goal, 1)
+
+    # Show at least one filled block once money has been raised
     filled = round(percent * length)
+
+    if current > 0 and filled == 0:
+        filled = 1
+
     return "█" * filled + "░" * (length - filled)
-
-
-async def get_funding_total():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-
-        page = await browser.new_page()
-
-        await page.goto(
-            GIVE_LIVELY_URL,
-            wait_until="domcontentloaded",
-            timeout=60000
-        )
-
-        # Give Give Lively time to load the live display
-        await page.wait_for_timeout(8000)
-
-        all_text = ""
-
-        print("FRAMES FOUND:")
-
-        for i, frame in enumerate(page.frames):
-            print(f"FRAME {i}: {frame.url}")
-
-            try:
-                text = await frame.locator("body").inner_text(timeout=5000)
-
-                if text.strip():
-                    print(f"FRAME {i} TEXT:")
-                    print(text)
-
-                    all_text += "\n" + text
-
-            except Exception as e:
-                print(f"Could not read frame {i}: {e}")
-
-        await browser.close()
-
-        amounts = re.findall(
-            r'\$([\d,]+(?:\.\d{2})?)',
-            all_text
-        )
-
-        print("AMOUNTS FOUND:", amounts)
-
-        if not amounts:
-            return None
-
-        # Ignore the $360,000 goal and use the first other dollar amount.
-        for amount in amounts:
-            value = float(amount.replace(",", ""))
-
-            if value != GOAL:
-                return value
-
-        return None
 
 
 @client.event
@@ -87,7 +67,7 @@ async def on_ready():
         await client.close()
         return
 
-    total = await get_funding_total()
+    total = get_funding_total()
 
     if total is None:
         await channel.send(
@@ -103,12 +83,15 @@ async def on_ready():
 
     embed = discord.Embed(
         title="🎬 JUST ROOMMATES FUNDING",
-        description=f"`{bar}`\n**{percent:.1f}% funded**"
+        description=(
+            f"`{bar}`\n"
+            f"**{percent:.2f}% funded**"
+        )
     )
 
     embed.add_field(
         name="💗 Raised",
-        value=f"**${total:,.2f}**",
+        value=f"**${total:,.0f}**",
         inline=True
     )
 
@@ -120,12 +103,15 @@ async def on_ready():
 
     embed.add_field(
         name="✨ Still Needed",
-        value=f"**${remaining:,.2f}**",
+        value=f"**${remaining:,.0f}**",
         inline=False
     )
 
     embed.set_footer(
-        text="Automatically updated from the Just Roommates Give Lively campaign."
+        text=(
+            "Automatically updated from the "
+            "Just Roommates Give Lively campaign."
+        )
     )
 
     await channel.send(embed=embed)
