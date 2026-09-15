@@ -18,10 +18,10 @@ jobs:
         with:
           python-version: "3.12"
 
-     - name: Install dependencies
-  run: |
-    pip install discord.py playwright
-    playwright install chromium
+      - name: Install dependencies
+        run: |
+          pip install discord.py playwright
+          playwright install chromium
 
       - name: Run funding bot
         env:
