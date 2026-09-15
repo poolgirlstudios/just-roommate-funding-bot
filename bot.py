@@ -1,6 +1,5 @@
 import os
 import re
-import asyncio
 import discord
 from playwright.async_api import async_playwright
 
@@ -9,7 +8,7 @@ DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
 CHANNEL_ID = 1549512858537041950
 GOAL = 360000
 
-GIVE_LIVELY_URL = "https://secure.givelively.org/donate/brave-maker/just-roommates"
+GIVE_LIVELY_URL = "https://secure.givelively.org/donations/brave-maker/just-roommates"
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
@@ -26,7 +25,12 @@ async def get_funding_total():
         browser = await p.chromium.launch(headless=True)
 
         page = await browser.new_page()
-        await page.goto(GIVE_LIVELY_URL, wait_until="networkidle")
+
+        await page.goto(
+            GIVE_LIVELY_URL,
+            wait_until="networkidle",
+            timeout=60000
+        )
 
         text = await page.locator("body").inner_text()
 
@@ -35,7 +39,7 @@ async def get_funding_total():
         print(text)
 
         match = re.search(
-            r'\$([\d,]+(?:\.\d{2})?)\s+raised',
+            r'\$([\d,]+(?:\.\d{2})?)\s+\$360,000\s+goal',
             text,
             re.IGNORECASE
         )
