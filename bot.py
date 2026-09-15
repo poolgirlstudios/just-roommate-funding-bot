@@ -32,22 +32,32 @@ async def get_funding_total():
             timeout=60000
         )
 
+        # Give the live display a moment to finish rendering
+        await page.wait_for_timeout(3000)
+
         text = await page.locator("body").inner_text()
+
+        print("PAGE TEXT:")
+        print(text)
 
         await browser.close()
 
-        print(text)
-
-        match = re.search(
-            r'\$([\d,]+(?:\.\d{2})?)\s+\$360,000\s+goal',
-            text,
-            re.IGNORECASE
+        # Find all dollar amounts displayed on the page
+        amounts = re.findall(
+            r'\$([\d,]+(?:\.\d{2})?)',
+            text
         )
 
-        if not match:
+        print("AMOUNTS FOUND:", amounts)
+
+        if not amounts:
             return None
 
-        return float(match.group(1).replace(",", ""))
+        # The first dollar amount on the Give Lively Live Display
+        # is the campaign's current amount raised.
+        total = float(amounts[0].replace(",", ""))
+
+        return total
 
 
 @client.event
@@ -65,7 +75,7 @@ async def on_ready():
 
     if total is None:
         await channel.send(
-            "⚠️ I still couldn't read the Give Lively total."
+            "⚠️ I couldn't read the Give Lively funding total."
         )
         await client.close()
         return
@@ -81,19 +91,19 @@ async def on_ready():
     )
 
     embed.add_field(
-        name="Raised",
+        name="💗 Raised",
         value=f"**${total:,.2f}**",
         inline=True
     )
 
     embed.add_field(
-        name="Goal",
+        name="🎯 Goal",
         value=f"**${GOAL:,.0f}**",
         inline=True
     )
 
     embed.add_field(
-        name="Still Needed",
+        name="✨ Still Needed",
         value=f"**${remaining:,.2f}**",
         inline=False
     )
